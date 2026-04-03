@@ -21,7 +21,7 @@ function App() {
 
         client.subscribe("/topic/messages", (msg) => {
           const body = JSON.parse(msg.body);
-          setCode(body.content); // 🔥 sync editor
+          setCode(body.content);
         });
       },
     });
