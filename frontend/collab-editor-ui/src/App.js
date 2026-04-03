@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
+import Editor from "@monaco-editor/react";
 
 function App() {
   const [stompClient, setStompClient] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [connected, setConnected] = useState(false); // ✅ track connection
+  const [connected, setConnected] = useState(false);
+  const [code, setCode] = useState("// Start typing...");
 
   useEffect(() => {
     const socket = new SockJS("http://localhost:8080/ws");
@@ -17,64 +17,44 @@ function App() {
 
       onConnect: () => {
         console.log("Connected to WebSocket");
-        setConnected(true); // ✅ mark connected
+        setConnected(true);
 
         client.subscribe("/topic/messages", (msg) => {
           const body = JSON.parse(msg.body);
-          setMessages((prev) => [...prev, body.content]);
+          setCode(body.content); // 🔥 sync editor
         });
-      },
-
-      onStompError: (frame) => {
-        console.error("Broker error:", frame.headers["message"]);
       },
     });
 
     client.activate();
     setStompClient(client);
 
-    return () => {
-      client.deactivate();
-    };
+    return () => client.deactivate();
   }, []);
 
-  const sendMessage = () => {
-    if (!connected) {
-      console.log("Not connected yet!");
-      return;
-    }
+  const handleChange = (value) => {
+    setCode(value);
 
-    if (stompClient && input) {
+    if (connected && stompClient) {
       stompClient.publish({
         destination: "/app/send",
-        body: JSON.stringify({ content: input }),
+        body: JSON.stringify({ content: value }),
       });
-      setInput("");
     }
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Collaborative Editor (Test)</h2>
+    <div style={{ height: "100vh" }}>
+      <h3 style={{ padding: "10px" }}>
+        Collaborative Code Editor {connected ? "🟢" : "🔴"}
+      </h3>
 
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Type message..."
+      <Editor
+        height="90%"
+        defaultLanguage="javascript"
+        value={code}
+        onChange={handleChange}
       />
-
-      <button onClick={sendMessage} disabled={!connected}>
-        Send
-      </button>
-
-      {!connected && <p>Connecting to server...</p>}
-
-      <div style={{ marginTop: "20px" }}>
-        <h4>Messages:</h4>
-        {messages.map((msg, index) => (
-          <div key={index}>{msg}</div>
-        ))}
-      </div>
     </div>
   );
 }
