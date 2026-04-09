@@ -46,7 +46,35 @@ function App() {
 
       if (op.type === "INSERT") {
         if (op.value === null || op.value === undefined) return prev;
-        updated.push(op);
+
+        if (op.prevId === null) {
+          let i = 0;
+
+          while (i < updated.length && updated[i].prevId === null && updated[i].id < op.id && updated[i].id.substring(0, 6) !== op.id.substring(0, 6)) {
+            i++;
+          }
+
+          updated.splice(i, 0, op);
+        } else {
+          const index = updated.findIndex(c => c.id === op.prevId);
+
+          if (index === -1) {
+            updated.push(op);
+          } else {
+            let i = index + 1;
+
+            while (
+              i < updated.length &&
+              updated[i].prevId === op.prevId &&
+              updated[i].id < op.id &&
+              updated[i].id.substring(0, 6) !== op.id.substring(0, 6)
+            ) {
+              i++;
+            }
+
+            updated.splice(i, 0, op);
+          }
+        }
       }
 
       if (op.type === "DELETE") {
@@ -104,15 +132,25 @@ function App() {
               console.log("CHANGE:", change);
 
               if (typeof change.text === "string" && change.text.length > 0) {
-                change.text.split("").forEach((ch) => {
+                change.text.split("").forEach((ch, i) => {
+                  console.log(ch, i);
+                  const index = change.rangeOffset + i;
+
+                  let prevId = null;
+
+                  if (index > 0 && charsRef.current[index - 1]) {
+                    prevId = charsRef.current[index - 1].id;
+                  }
+
                   const op = {
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
                     value: ch,
-                    prevId: null,
+                    prevId: prevId,
                   };
 
                   console.log("SENDING INSERT", op);
+                  console.log(op.prevId);
 
                   clientRef.current.publish({
                     destination: "/app/send",
