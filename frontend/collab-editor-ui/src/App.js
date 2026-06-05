@@ -45,49 +45,41 @@ function App() {
       let updated = [...prev];
 
       if (op.type === "INSERT") {
-        if (op.value === null || op.value === undefined) return prev;
-
-        if (op.prevId === null) {
-          let i = 0;
-
-          while (
-            i < updated.length &&
-            updated[i].prevId === null &&
-            updated[i].id < op.id &&
-            updated[i].id.substring(0, 6) !== op.id.substring(0, 6)
-          ) {
-            i++;
-          }
-
-          updated.splice(i, 0, op);
-        } else {
-          const index = updated.findIndex((c) => c.id === op.prevId);
-
-          if (index === -1) {
-            updated.push(op);
-          } else {
-            let i = index + 1;
-
-            while (
-              i < updated.length &&
-              updated[i].prevId === op.prevId &&
-              updated[i].id < op.id &&
-              updated[i].id.substring(0, 6) !== op.id.substring(0, 6)
-            ) {
-              i++;
-            }
-
-            updated.splice(i, 0, op);
-          }
+        if (op.value === null || op.value === undefined) {
+          return prev;
         }
+
+        // TEMPORARY:
+        // Still append-based until comparePositions()
+        // and generatePosition() are implemented.
+        updated.push({
+          ...op,
+          deleted: false,
+        });
       }
 
       if (op.type === "DELETE") {
-        console.log("deleted: ", op.id, op.value);
-        updated = updated.filter((c) => c.id !== op.id);
+        // TEMPORARY:
+        // Full tombstones come later.
+        // For now just mark deleted.
+        updated = updated.map((c) => {
+          if (c.id === op.id) {
+            return {
+              ...c,
+              deleted: true,
+            };
+          }
+
+          return c;
+        });
       }
 
-      const newCode = updated.map((c) => c.value).join("");
+      // TEMPORARY:
+      // Rendering only visible chars.
+      const newCode = updated
+        .filter((c) => !c.deleted)
+        .map((c) => c.value)
+        .join("");
 
       if (editorRef.current) {
         const editor = editorRef.current;
@@ -95,6 +87,7 @@ function App() {
         const position = editor.getPosition();
 
         ignoreChangeRef.current = true;
+
         model.setValue(newCode);
 
         if (position) {
@@ -103,6 +96,7 @@ function App() {
       }
 
       console.log(updated);
+
       charsRef.current = updated;
 
       return updated;
@@ -120,7 +114,7 @@ function App() {
         defaultLanguage="javascript"
         defaultValue=""
         onMount={(editor) => {
-          console.log("EDITOR MOUNTED DIRECT");
+          console.log("EDITOR MOUNTED");
 
           editorRef.current = editor;
 
@@ -132,40 +126,32 @@ function App() {
               return;
             }
 
-            if (!connectedRef.current || !clientRef.current) return;
+            if (!connectedRef.current || !clientRef.current) {
+              return;
+            }
 
             event.changes.forEach((change) => {
               console.log("CHANGE:", change);
 
-              if (typeof change.text === "string" && change.text.length > 0) {
-                const model = editorRef.current.getModel();
-                const position = editorRef.current.getPosition();
-
-                let cursorIndex = model.getOffsetAt(position);
-
-                change.text.split("").forEach((ch, i) => {
-                  const currentIndex =
-                    cursorIndex - change.text.length + i;
-
-                  let prevId = null;
-
-                  if (
-                    currentIndex > 0 &&
-                    charsRef.current[currentIndex - 1]
-                  ) {
-                    prevId =
-                      charsRef.current[currentIndex - 1].id;
-                  }
-
+              // INSERT
+              if (
+                typeof change.text === "string" &&
+                change.text.length > 0
+              ) {
+                change.text.split("").forEach((ch) => {
                   const op = {
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
                     value: ch,
-                    prevId: prevId,
+
+                    // Placeholder for Step 1
+                    // Real LSEQ positions come in Step 3
+                    position: [],
+
+                    deleted: false,
                   };
 
                   console.log("SENDING INSERT", op);
-                  console.log(op.prevId);
 
                   clientRef.current.publish({
                     destination: "/app/send",
@@ -174,16 +160,16 @@ function App() {
                 });
               }
 
+              // DELETE
               if (change.rangeLength > 0) {
                 const index = change.rangeOffset;
 
-                console.log(
-                  index,
-                  charsRef.current[index],
-                  charsRef.current.length
+                // Only visible chars
+                const visibleChars = charsRef.current.filter(
+                  (c) => !c.deleted
                 );
 
-                const target = charsRef.current[index];
+                const target = visibleChars[index];
 
                 if (!target) return;
 

@@ -3,4 +3,5 @@
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/config/WebSocketConfig.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/model/Operation.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/model/OperationType.java
+/home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/model/PositionComponent.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/websocket/MessageController.java
