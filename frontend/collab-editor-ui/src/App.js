@@ -6,6 +6,24 @@ import Editor from "@monaco-editor/react";
 const clientId = Math.random().toString(36).substring(2, 8);
 let counter = 0;
 
+function comparePositions(a, b) {
+  const minLength = Math.min(a.length, b.length);
+
+  for (let i = 0; i < minLength; i++) {
+    if (a[i].digit !== b[i].digit) {
+      return a[i].digit - b[i].digit;
+    }
+
+    if (a[i].clientId !== b[i].clientId) {
+      return a[i].clientId.localeCompare(
+        b[i].clientId
+      );
+    }
+  }
+
+  return a.length - b.length;
+}
+
 function App() {
   const [connected, setConnected] = useState(false);
   const [chars, setChars] = useState([]);
@@ -96,7 +114,7 @@ function App() {
       }
 
       console.log(updated);
-
+      
       charsRef.current = updated;
 
       return updated;
