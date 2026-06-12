@@ -6,6 +6,14 @@ import Editor from "@monaco-editor/react";
 const clientId = Math.random().toString(36).substring(2, 8);
 let counter = 0;
 
+function randomBetween(min, max) {
+  return (
+    Math.floor(
+      Math.random() * (max - min + 1)
+    ) + min
+  );
+}
+
 function comparePositions(a, b) {
   const minLength = Math.min(a.length, b.length);
 
@@ -24,24 +32,55 @@ function comparePositions(a, b) {
   return a.length - b.length;
 }
 
-function generatePosition(leftPos, rightPos, clientId) {
-  const left =
-    leftPos && leftPos.length > 0
-      ? leftPos[0].digit
+function generatePosition(
+  leftPos,
+  rightPos,
+  clientId,
+  depth = 0
+) {
+  const BASE = 1024 * (depth < 6 ? (1 << depth) : 64);
+
+  const leftDigit =
+    depth < leftPos.length
+      ? leftPos[depth].digit
       : 0;
 
-  const right =
-    rightPos && rightPos.length > 0
-      ? rightPos[0].digit
-      : 1000;
+  const rightDigit =
+    rightPos && depth < rightPos.length
+      ? rightPos[depth].digit
+      : BASE;
 
-  const digit = Math.floor((left + right) / 2);
+  if (rightDigit - leftDigit > 1) {
+    const digit = randomBetween(leftDigit + 1, rightDigit - 1);
+
+    return [
+      ...leftPos.slice(0, depth),
+      {
+        digit,
+        clientId,
+      },
+    ];
+  }
+
+  const prefix =
+    depth < leftPos.length
+      ? leftPos.slice(0, depth + 1)
+      : [
+          ...leftPos,
+          {
+            digit: leftDigit,
+            clientId,
+          },
+        ];
 
   return [
-    {
-      digit,
+    ...prefix,
+    ...generatePosition(
+      leftPos,
+      rightPos,
       clientId,
-    },
+      depth + 1
+    ).slice(prefix.length)
   ];
 }
 
@@ -189,6 +228,9 @@ function App() {
                 const visibleChars = charsRef.current.filter(
                   (c) => !c.deleted
                 );
+
+                let currentLeftPos = 0;
+
                 change.text.split("").forEach((ch, i) => {
                   const currentIndex =
                     cursorIndex - change.text.length + i;
@@ -198,6 +240,8 @@ function App() {
                     visibleChars[currentIndex - 1]
                       ? visibleChars[currentIndex - 1].position
                       : [];
+                  
+                  currentLeftPos = i === 0 ? leftPos : currentLeftPos;
 
                   const rightPos =
                     currentIndex < visibleChars.length &&
@@ -206,7 +250,7 @@ function App() {
                       : null;
 
                   const newPosition = generatePosition(
-                    leftPos,
+                    currentLeftPos,
                     rightPos,
                     clientId
                   );                
@@ -214,13 +258,12 @@ function App() {
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
                     value: ch,
-
-                    // Placeholder for Step 1
-                    // Real LSEQ positions come in Step 3
                     position: newPosition,
 
                     deleted: false,
                   };
+
+                  currentLeftPos = newPosition;
 
                   console.log("SENDING INSERT", op);
                   console.log("GENERATED POSITION", newPosition);
@@ -235,27 +278,28 @@ function App() {
               // DELETE
               if (change.rangeLength > 0) {
                 const index = change.rangeOffset;
+                const end = index + change.rangeLength;
 
                 // Only visible chars
                 const visibleChars = charsRef.current.filter(
                   (c) => !c.deleted
                 );
+                
+                for(let i = index; i < end; i ++){
+                  const target = visibleChars[i];
+                  if (!target) continue;
 
-                const target = visibleChars[index];
+                  const op = {
+                    type: "DELETE",
+                    id: target.id,
+                  };
 
-                if (!target) return;
-
-                const op = {
-                  type: "DELETE",
-                  id: target.id,
-                };
-
-                console.log("SENDING DELETE", op);
-
-                clientRef.current.publish({
-                  destination: "/app/send",
-                  body: JSON.stringify(op),
-                });
+                  console.log("SENDING DELETE", op);
+                  clientRef.current.publish({
+                    destination: "/app/send",
+                    body: JSON.stringify(op),
+                  });
+                }
               }
             });
           });
