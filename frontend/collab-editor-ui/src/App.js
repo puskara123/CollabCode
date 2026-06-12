@@ -24,6 +24,27 @@ function comparePositions(a, b) {
   return a.length - b.length;
 }
 
+function generatePosition(leftPos, rightPos, clientId) {
+  const left =
+    leftPos && leftPos.length > 0
+      ? leftPos[0].digit
+      : 0;
+
+  const right =
+    rightPos && rightPos.length > 0
+      ? rightPos[0].digit
+      : 1000;
+
+  const digit = Math.floor((left + right) / 2);
+
+  return [
+    {
+      digit,
+      clientId,
+    },
+  ];
+}
+
 function App() {
   const [connected, setConnected] = useState(false);
   const [chars, setChars] = useState([]);
@@ -74,6 +95,10 @@ function App() {
           ...op,
           deleted: false,
         });
+
+        updated.sort((a, b) =>
+          comparePositions(a.position, b.position)
+        );
       }
 
       if (op.type === "DELETE") {
@@ -156,7 +181,35 @@ function App() {
                 typeof change.text === "string" &&
                 change.text.length > 0
               ) {
-                change.text.split("").forEach((ch) => {
+                const model = editorRef.current.getModel();
+                const position = editorRef.current.getPosition();
+
+                let cursorIndex = model.getOffsetAt(position);
+
+                const visibleChars = charsRef.current.filter(
+                  (c) => !c.deleted
+                );
+                change.text.split("").forEach((ch, i) => {
+                  const currentIndex =
+                    cursorIndex - change.text.length + i;
+
+                  const leftPos =
+                    currentIndex > 0 &&
+                    visibleChars[currentIndex - 1]
+                      ? visibleChars[currentIndex - 1].position
+                      : [];
+
+                  const rightPos =
+                    currentIndex < visibleChars.length &&
+                    visibleChars[currentIndex]
+                      ? visibleChars[currentIndex].position
+                      : null;
+
+                  const newPosition = generatePosition(
+                    leftPos,
+                    rightPos,
+                    clientId
+                  );                
                   const op = {
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
@@ -164,12 +217,13 @@ function App() {
 
                     // Placeholder for Step 1
                     // Real LSEQ positions come in Step 3
-                    position: [],
+                    position: newPosition,
 
                     deleted: false,
                   };
 
                   console.log("SENDING INSERT", op);
+                  console.log("GENERATED POSITION", newPosition);
 
                   clientRef.current.publish({
                     destination: "/app/send",
