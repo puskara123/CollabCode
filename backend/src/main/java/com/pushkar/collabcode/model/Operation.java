@@ -5,6 +5,7 @@ import java.util.List;
 
 @Data
 public class Operation {
+    private String clientId;
     private OperationType type;
     private String id;
     private String value;

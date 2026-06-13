@@ -3,7 +3,7 @@ import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 import Editor from "@monaco-editor/react";
 
-const clientId = Math.random().toString(36).substring(2, 8);
+const clientId = crypto.randomUUID();
 let counter = 0;
 
 function randomBetween(min, max) {
@@ -108,6 +108,9 @@ function App() {
 
         stomp.subscribe("/topic/messages", (msg) => {
           const op = JSON.parse(msg.body);
+
+          if(op.clientId === clientId) return;
+
           applyOperation(op);
         });
       },
@@ -253,8 +256,10 @@ function App() {
                     currentLeftPos,
                     rightPos,
                     clientId
-                  );                
+                  );  
+                  console.log(leftPos, rightPos);              
                   const op = {
+                    clientId: clientId,
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
                     value: ch,
@@ -267,6 +272,8 @@ function App() {
 
                   console.log("SENDING INSERT", op);
                   console.log("GENERATED POSITION", newPosition);
+
+                  applyOperation(op);
 
                   clientRef.current.publish({
                     destination: "/app/send",
@@ -290,11 +297,15 @@ function App() {
                   if (!target) continue;
 
                   const op = {
+                    clientId: clientId,
                     type: "DELETE",
                     id: target.id,
                   };
 
                   console.log("SENDING DELETE", op);
+
+                  applyOperation(op);
+
                   clientRef.current.publish({
                     destination: "/app/send",
                     body: JSON.stringify(op),
