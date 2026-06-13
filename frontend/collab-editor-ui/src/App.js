@@ -32,6 +32,28 @@ function comparePositions(a, b) {
   return a.length - b.length;
 }
 
+function binarySearchInsert(arr, newChar) {
+  let l = 0;
+  let r = arr.length;
+
+  while (l < r) {
+    const mid = l + ((r - l) >> 1);
+
+    if (
+      comparePositions(
+        arr[mid].position,
+        newChar.position
+      ) < 0
+    ) {
+      l = mid + 1;
+    } else {
+      r = mid;
+    }
+  }
+
+  return l;
+}
+
 function generatePosition(
   leftPos,
   rightPos,
@@ -130,17 +152,23 @@ function App() {
           return prev;
         }
 
-        // TEMPORARY:
-        // Still append-based until comparePositions()
-        // and generatePosition() are implemented.
-        updated.push({
+        const newChar = {
+          ...op,
+          deleted: false,
+        };
+
+        const idx = binarySearchInsert(updated, newChar);
+
+        updated.splice(idx, 0, newChar);
+
+        /*updated.push({
           ...op,
           deleted: false,
         });
 
         updated.sort((a, b) =>
           comparePositions(a.position, b.position)
-        );
+        );*/
       }
 
       if (op.type === "DELETE") {
