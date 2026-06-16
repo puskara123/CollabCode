@@ -208,7 +208,7 @@ function App() {
         }
       }
 
-      console.log(updated);
+      //console.log(updated);
       
       charsRef.current = updated;
 
@@ -227,12 +227,12 @@ function App() {
         defaultLanguage="javascript"
         defaultValue=""
         onMount={(editor) => {
-          console.log("EDITOR MOUNTED");
+          //console.log("EDITOR MOUNTED");
 
           editorRef.current = editor;
 
           editor.onDidChangeModelContent((event) => {
-            console.log("MONACO CHANGE EVENT", event);
+            //console.log("MONACO CHANGE EVENT", event);
 
             if (ignoreChangeRef.current) {
               ignoreChangeRef.current = false;
@@ -244,7 +244,7 @@ function App() {
             }
 
             event.changes.forEach((change) => {
-              console.log("CHANGE:", change);
+              //console.log("CHANGE:", change);
 
               // INSERT
               if (
@@ -285,7 +285,7 @@ function App() {
                     rightPos,
                     clientId
                   );  
-                  console.log(leftPos, rightPos);              
+                  //console.log(leftPos, rightPos);              
                   const op = {
                     clientId: clientId,
                     type: "INSERT",
@@ -298,8 +298,8 @@ function App() {
 
                   currentLeftPos = newPosition;
 
-                  console.log("SENDING INSERT", op);
-                  console.log("GENERATED POSITION", newPosition);
+                  //console.log("SENDING INSERT", op);
+                  //console.log("GENERATED POSITION", newPosition);
 
                   applyOperation(op, false);
 
@@ -330,7 +330,7 @@ function App() {
                     id: target.id,
                   };
 
-                  console.log("SENDING DELETE", op);
+                  //console.log("SENDING DELETE", op);
 
                   applyOperation(op, false);
 
