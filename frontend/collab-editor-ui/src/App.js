@@ -133,7 +133,7 @@ function App() {
 
           if(op.clientId === clientId) return;
 
-          applyOperation(op);
+          applyOperation(op, true);
         });
       },
     });
@@ -143,7 +143,7 @@ function App() {
     return () => stomp.deactivate();
   }, []);
 
-  const applyOperation = (op) => {
+  const applyOperation = (op, updateEditor = true) => {
     setChars((prev) => {
       let updated = [...prev];
 
@@ -194,14 +194,14 @@ function App() {
         .map((c) => c.value)
         .join("");
 
-      if (editorRef.current) {
+      if (updateEditor && editorRef.current) {
         const editor = editorRef.current;
         const model = editor.getModel();
         const position = editor.getPosition();
 
         ignoreChangeRef.current = true;
 
-        model.setValue(newCode);
+        model.pushEditOperations([], [{range: model.getFullModelRange(), text: newCode,},], () => null);
 
         if (position) {
           editor.setPosition(position);
@@ -301,7 +301,7 @@ function App() {
                   console.log("SENDING INSERT", op);
                   console.log("GENERATED POSITION", newPosition);
 
-                  applyOperation(op);
+                  applyOperation(op, false);
 
                   clientRef.current.publish({
                     destination: "/app/send",
@@ -332,7 +332,7 @@ function App() {
 
                   console.log("SENDING DELETE", op);
 
-                  applyOperation(op);
+                  applyOperation(op, false);
 
                   clientRef.current.publish({
                     destination: "/app/send",
