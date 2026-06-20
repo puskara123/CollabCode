@@ -32,6 +32,37 @@ function comparePositions(a, b) {
   return a.length - b.length;
 }
 
+function debugState(label, chars) {
+
+  console.log(
+    label,
+
+    chars
+      .filter(c => !c.deleted)
+      .map(c => c.value)
+      .join("")
+  );
+
+  console.table(
+
+    chars
+      .filter(c => !c.deleted)
+      .map((c,i) => ({
+
+        i,
+
+        value:c.value,
+
+        position:JSON.stringify(
+          c.position
+        )
+
+      }))
+
+  );
+
+}
+
 function binarySearchInsert(arr, newChar) {
   let l = 0;
   let r = arr.length;
@@ -159,13 +190,20 @@ function App() {
 
           const model = editorRef.current.getModel();
 
-          ignoreChangeRef.current = true;
+          if(newCode.length > 0){
+            ignoreChangeRef.current = true;
 
-          model.pushEditOperations(
-            [],
-            [{ range: model.getFullModelRange(), text: newCode }],
-            () => null
-          );
+            model.pushEditOperations(
+              [],
+              [{ range: model.getFullModelRange(), text: newCode }],
+              () => null
+            );
+
+            ignoreChangeRef.current = false;
+          }
+          else{
+            ignoreChangeRef.current = false;
+          }
         }
       
     };    
@@ -185,8 +223,15 @@ function App() {
 
         await waitForEditor();
 
-        await bootstrapDocument();
-
+        // FIX: Subscribe BEFORE fetching bootstrap so that any ops broadcast
+        // by other tabs while our HTTP fetch is in-flight are captured rather
+        // than silently lost.  We buffer them here and replay them after the
+        // bootstrap snapshot has been applied.  Without this, there is a gap
+        // between the moment the HTTP request leaves the browser and the moment
+        // the subscription becomes active; ops arriving in that window are
+        // never delivered to this tab, causing permanent divergence.
+        const pendingBuffer = [];
+        let bootstrapDone = false;
 
         stomp.subscribe(
           "/topic/messages",
@@ -196,18 +241,69 @@ function App() {
             const op =
               JSON.parse(msg.body);
 
-
             if (
               op.clientId === clientId
             ) return;
 
-            applyOperation(
-              op,
-              true
-            );
+            // While bootstrap is still running, queue incoming remote ops.
+            // Once bootstrap is done, apply them immediately as usual.
+            if (!bootstrapDone) {
+              pendingBuffer.push(op);
+            } else {
+              console.log(
+
+                "REMOTE RECEIVED",
+
+                op.value,
+
+                op.position
+
+              );              
+              applyOperation(
+                op,
+                true
+              );
+            }
 
           }
         );
+
+        await bootstrapDocument();
+
+        // Bootstrap snapshot is now in charsRef.  Replay any ops that arrived
+        // from other tabs while the HTTP fetch was in-flight.  These must be
+        // applied with updateEditor=false for the intermediate steps and then
+        // a single editor write at the end, matching the bootstrap pattern.
+        bootstrapDone = true;
+
+          pendingBuffer.forEach((op) => {
+          applyOperation(op, false);
+        });
+
+        // One editor write to reflect any buffered remote ops.
+        if (pendingBuffer.length > 0 && editorRef.current) {
+          const newCode = charsRef.current
+            .filter((c) => !c.deleted)
+            .map((c) => c.value)
+            .join("");
+
+          const model = editorRef.current.getModel();
+
+          if(newCode.length > 0){
+            ignoreChangeRef.current = true;
+
+            model.pushEditOperations(
+              [],
+              [{ range: model.getFullModelRange(), text: newCode }],
+              () => null
+            );
+
+            ignoreChangeRef.current = false;
+          }
+          else{
+            ignoreChangeRef.current = false;
+          }
+        }
 
         // Mark initialized BEFORE subscribing. The semantic meaning of this
         // flag is "bootstrap is done and user input is safe to process". 
@@ -226,6 +322,7 @@ function App() {
         // stay in sync across re-renders (imperative updateOptions loses
         // to the React prop on every re-render).
         setEditorReadOnly(false);
+        console.log("Bootstrap complete", ignoreChangeRef.current);
 
       }     ,
     });
@@ -279,6 +376,19 @@ function App() {
     }
 
     // Write synchronously, BEFORE any other event has a chance to read it.
+
+    debugState(
+
+      `${clientId}
+
+       ${op.type}
+
+       ${op.value ?? op.id}`,
+
+      updated
+
+    );
+
     charsRef.current = updated;
 
     // TEMPORARY:
@@ -352,7 +462,7 @@ function App() {
       // Restore cursor at the adjusted offset in the new content.
       const newPosition = model.getPositionAt(newCursorOffset);
       editor.setPosition(newPosition);
-    }
+    }    
 
     // setChars only needs to trigger a re-render with the already-computed
     // array — it's no longer the place where charsRef gets updated, so it's
@@ -384,7 +494,8 @@ function App() {
             }
 
             if (ignoreChangeRef.current) {
-              ignoreChangeRef.current = false;
+              console.log("Ignoring change event");
+              ignoreChangeRef.current = false;  
               return;
             }
 
@@ -500,6 +611,16 @@ function App() {
                   // applyOperation updates charsRef.current synchronously via
                   // binarySearchInsert — it is now the sole source of truth.
                   applyOperation(op, false);
+
+                  console.log(
+
+                    "LOCAL PUBLISH",
+
+                    ch,
+
+                    newPosition
+
+                  );                  
 
                   clientRef.current.publish({
                     destination: "/app/send",
