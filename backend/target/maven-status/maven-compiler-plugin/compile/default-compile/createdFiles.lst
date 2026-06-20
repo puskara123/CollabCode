@@ -1,4 +1,6 @@
 com/pushkar/collabcode/model/Operation.class
+com/pushkar/collabcode/repository/OperationRepository.class
+com/pushkar/collabcode/controller/DocumentController.class
 com/pushkar/collabcode/config/WebSocketConfig.class
 com/pushkar/collabcode/model/PositionComponent.class
 com/pushkar/collabcode/config/SecurityConfig.class

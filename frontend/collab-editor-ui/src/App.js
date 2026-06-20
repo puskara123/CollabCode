@@ -89,7 +89,7 @@ function generatePosition(
       ? leftPos.slice(0, depth + 1)
       : [
           ...leftPos,
-          {
+          leftPos[depth] ?? {
             digit: leftDigit,
             clientId,
           },
@@ -108,34 +108,126 @@ function generatePosition(
 
 function App() {
   const [connected, setConnected] = useState(false);
-  const [chars, setChars] = useState([]);
+  const [editorReadOnly, setEditorReadOnly] = useState(true);
 
   const clientRef = useRef(null);
   const connectedRef = useRef(false);
   const editorRef = useRef(null);
   const ignoreChangeRef = useRef(false);
   const charsRef = useRef([]);
+  const editorReadyRef = useRef(false);
+  const initializedRef = useRef(false);
+
+  const waitForEditor = async () => {
+
+    while (!editorReadyRef.current) {
+
+      await new Promise(
+        resolve => setTimeout(resolve, 10)
+      );
+
+    }
+
+  };  
 
   useEffect(() => {
+    const bootstrapDocument =
+      async () => {
+
+        const response =
+          await fetch(
+            "http://localhost:8080/document/default/bootstrap"
+          );
+
+        const operations =
+          await response.json();
+
+        // Apply every bootstrap op to charsRef WITHOUT updating the editor on
+        // each iteration — a document with N ops would otherwise trigger N full
+        // Monaco redraws. Instead we accumulate into charsRef synchronously and
+        // do a single editor write at the end.
+        operations.forEach((op) => {
+          applyOperation(op, false);
+        });
+
+        // Single editor write for the entire bootstrapped document.
+        if (editorRef.current) {
+          const newCode = charsRef.current
+            .filter((c) => !c.deleted)
+            .map((c) => c.value)
+            .join("");
+
+          const model = editorRef.current.getModel();
+
+          ignoreChangeRef.current = true;
+
+          model.pushEditOperations(
+            [],
+            [{ range: model.getFullModelRange(), text: newCode }],
+            () => null
+          );
+        }
+      
+    };    
     const socket = new SockJS("http://localhost:8080/ws");
 
     const stomp = new Client({
       webSocketFactory: () => socket,
       debug: () => {},
 
-      onConnect: () => {
+      onConnect: async () => {
+
         setConnected(true);
+
         connectedRef.current = true;
+
         clientRef.current = stomp;
 
-        stomp.subscribe("/topic/messages", (msg) => {
-          const op = JSON.parse(msg.body);
+        await waitForEditor();
 
-          if(op.clientId === clientId) return;
+        await bootstrapDocument();
 
-          applyOperation(op, true);
-        });
-      },
+
+        stomp.subscribe(
+          "/topic/messages",
+
+          (msg) => {
+
+            const op =
+              JSON.parse(msg.body);
+
+
+            if (
+              op.clientId === clientId
+            ) return;
+
+            applyOperation(
+              op,
+              true
+            );
+
+          }
+        );
+
+        // Mark initialized BEFORE subscribing. The semantic meaning of this
+        // flag is "bootstrap is done and user input is safe to process". 
+        // Setting it after subscribe creates a window where the subscription
+        // is live but the flag is false — any user keystroke landing in that
+        // window would be silently dropped by the onDidChangeModelContent guard.
+        initializedRef.current = true;
+
+        // Lift the read-only lock now that bootstrap is complete and the
+        // CRDT state is consistent. Any keystrokes before this point would
+        // have generated ops against an empty/partial charsRef, producing
+        // positions that are wrong relative to the already-bootstrapped
+        // document — making the editor read-only during bootstrap is the
+        // simplest correct solution.
+        // Drive readOnly through React state so the prop and the editor
+        // stay in sync across re-renders (imperative updateOptions loses
+        // to the React prop on every re-render).
+        setEditorReadOnly(false);
+
+      }     ,
     });
 
     stomp.activate();
@@ -199,21 +291,72 @@ function App() {
     if (updateEditor && editorRef.current) {
       const editor = editorRef.current;
       const model = editor.getModel();
-      const position = editor.getPosition();
+
+      // Compute the current cursor offset in the OLD content before we
+      // replace it, so we can adjust it for the incoming op.
+      const oldPosition = editor.getPosition();
+      const oldCursorOffset = oldPosition
+        ? model.getOffsetAt(oldPosition)
+        : 0;
+
+      // Find where this op landed in the visible (non-deleted) character
+      // sequence. For an INSERT, the op was placed at some index in
+      // charsRef via binarySearchInsert; we count the visible chars before
+      // that index to get its Monaco offset. For a DELETE, the char was
+      // already tombstoned so we count visible chars up to its former slot.
+      let opMonacoOffset = null;
+      if (op.type === "INSERT") {
+        // updated is already the new charsRef — find the inserted char.
+        const insertedIdx = updated.findIndex((c) => c.id === op.id);
+        if (insertedIdx !== -1) {
+          // Count visible chars strictly before the inserted position.
+          opMonacoOffset = updated
+            .slice(0, insertedIdx)
+            .filter((c) => !c.deleted)
+            .length;
+        }
+      } else if (op.type === "DELETE") {
+        // For a delete, the char is now tombstoned. Find how many visible
+        // chars come before it in the array to get its old Monaco offset.
+        const deletedIdx = updated.findIndex((c) => c.id === op.id);
+        if (deletedIdx !== -1) {
+          opMonacoOffset = updated
+            .slice(0, deletedIdx)
+            .filter((c) => !c.deleted)
+            .length;
+        }
+      }
+
+      // Adjust the cursor: if the op landed at or before the cursor,
+      // shift the cursor right (INSERT) or left (DELETE) by 1. This keeps
+      // the cursor pointing at the same logical character after the
+      // full-range replace, rather than the same line/column which now
+      // refers to a different character.
+      let newCursorOffset = oldCursorOffset;
+      if (opMonacoOffset !== null) {
+        if (op.type === "INSERT" && opMonacoOffset <= oldCursorOffset) {
+          newCursorOffset = oldCursorOffset + 1;
+        } else if (op.type === "DELETE" && opMonacoOffset < oldCursorOffset) {
+          newCursorOffset = oldCursorOffset - 1;
+        }
+      }
 
       ignoreChangeRef.current = true;
 
-      model.pushEditOperations([], [{range: model.getFullModelRange(), text: newCode,},], () => null);
+      model.pushEditOperations(
+        [],
+        [{ range: model.getFullModelRange(), text: newCode }],
+        () => null
+      );
 
-      if (position) {
-        editor.setPosition(position);
-      }
+      // Restore cursor at the adjusted offset in the new content.
+      const newPosition = model.getPositionAt(newCursorOffset);
+      editor.setPosition(newPosition);
     }
 
     // setChars only needs to trigger a re-render with the already-computed
     // array — it's no longer the place where charsRef gets updated, so it's
     // safe for this to be deferred/batched by React.
-    setChars(updated);
   };
 
   return (
@@ -226,13 +369,19 @@ function App() {
         height="90%"
         defaultLanguage="javascript"
         defaultValue=""
+        options={{
+          readOnly: editorReadOnly,
+        }}
         onMount={(editor) => {
-          //console.log("EDITOR MOUNTED");
-
           editorRef.current = editor;
 
+          editorReadyRef.current = true;
+
+
           editor.onDidChangeModelContent((event) => {
-            //console.log("MONACO CHANGE EVENT", event);
+            if (!initializedRef.current) {
+              return;
+            }
 
             if (ignoreChangeRef.current) {
               ignoreChangeRef.current = false;
@@ -244,104 +393,113 @@ function App() {
             }
 
             event.changes.forEach((change) => {
-              //console.log("CHANGE:", change);
 
               // DELETE
               if (change.rangeLength > 0) {
-                const index = change.rangeOffset;
-                const end = index + change.rangeLength;
 
-                // Only visible chars
-                const visibleChars = charsRef.current.filter(
-                  (c) => !c.deleted
-                );
-                
-                for(let i = index; i < end; i ++){
-                  const target = visibleChars[i];
-                  if (!target) continue;
+                const index = change.rangeOffset;
+
+                const end =
+                  index + change.rangeLength;
+
+                const visibleChars =
+                  charsRef.current.filter(
+                    (c) => !c.deleted
+                  );
+
+                const targets =
+                  visibleChars.slice(
+                    index,
+                    end
+                  );
+
+                targets.forEach((target) => {
+
+                  if (!target) return;
 
                   const op = {
+
                     clientId: clientId,
+                  
                     type: "DELETE",
+                  
                     id: target.id,
+                  
                   };
-
-                  //console.log("SENDING DELETE", op);
-
-                  applyOperation(op, false);
+                
+                  applyOperation(
+                    op,
+                    false
+                  );
 
                   clientRef.current.publish({
+
                     destination: "/app/send",
+
                     body: JSON.stringify(op),
+
                   });
-                }
+
+                });
               }
+
 
               // INSERT
               if (
                 typeof change.text === "string" &&
                 change.text.length > 0
               ) {
-                const model = editorRef.current.getModel();
-                const position = editorRef.current.getPosition();
+                const insertIndex = change.rangeOffset;
 
-                let cursorIndex = model.getOffsetAt(position);
+                // Snapshot charsRef once before the loop. The insertion
+                // window is fixed for the duration of this Monaco event:
+                // - rightPos is the character that was at insertIndex before
+                //   we started — it never moves regardless of how many chars
+                //   we insert to its left, so it must be frozen here.
+                // - leftPos seeds from the char immediately left of the insert
+                //   point, then advances to each newly generated position so
+                //   consecutive characters chain correctly.
+                // Re-reading charsRef inside the loop would shift the right
+                // boundary by +1 for every character already inserted (because
+                // binarySearchInsert places each new char before the old right
+                // neighbour, pushing it rightward in the array), causing Y and
+                // Z in a paste of XYZ to be placed against the wrong neighbour.
+                // JavaScript is single-threaded — no remote op can interleave
+                // inside a synchronous forEach — so a single snapshot is both
+                // correct and sufficient.
+                const baseSnapshot = charsRef.current.filter((c) => !c.deleted);
+                let currentLeftPos =
+                  insertIndex > 0 && baseSnapshot[insertIndex - 1]
+                    ? baseSnapshot[insertIndex - 1].position
+                    : [];
+                const fixedRightPos =
+                  insertIndex < baseSnapshot.length && baseSnapshot[insertIndex]
+                    ? baseSnapshot[insertIndex].position
+                    : null;
 
-                let visibleChars = charsRef.current.filter(
-                  (c) => !c.deleted
-                );
-
-                let currentLeftPos = [];
-
-                change.text.split("").forEach((ch, i) => {
-                  const currentIndex =
-                    cursorIndex - change.text.length + i;
-
-                  const leftPos =
-                    currentIndex > 0 &&
-                    visibleChars[currentIndex - 1]
-                      ? visibleChars[currentIndex - 1].position
-                      : [];
-                  
-                  currentLeftPos = i === 0 ? leftPos : currentLeftPos;
-
-                  const rightPos =
-                    currentIndex < visibleChars.length &&
-                    visibleChars[currentIndex]
-                      ? visibleChars[currentIndex].position
-                      : null;
-
+                change.text.split("").forEach((ch) => {
                   const newPosition = generatePosition(
                     currentLeftPos,
-                    rightPos,
+                    fixedRightPos,
                     clientId
-                  );  
-                  //console.log(leftPos, rightPos);              
+                  );
+
                   const op = {
                     clientId: clientId,
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,
                     value: ch,
                     position: newPosition,
-
                     deleted: false,
                   };
 
+                  // Advance leftPos to the character we just inserted so the
+                  // next character is placed immediately after it.
                   currentLeftPos = newPosition;
 
-                  //console.log("SENDING INSERT", op);
-                  //console.log("GENERATED POSITION", newPosition);
-
+                  // applyOperation updates charsRef.current synchronously via
+                  // binarySearchInsert — it is now the sole source of truth.
                   applyOperation(op, false);
-
-                  visibleChars.splice(
-                    currentIndex,
-                    0,
-                    {
-                      ...op,
-                      deleted: false,
-                    }
-                  );
 
                   clientRef.current.publish({
                     destination: "/app/send",
