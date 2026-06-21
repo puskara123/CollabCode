@@ -8,6 +8,6 @@ import java.util.List;
 
 public interface OperationRepository extends MongoRepository<Operation, String> {
 
-    List<Operation> findAll();
+    List<Operation> findByDocumentId(String documentId);
 
 }

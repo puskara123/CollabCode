@@ -6,26 +6,49 @@ import com.pushkar.collabcode.repository.OperationRepository;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @Controller
 public class MessageController {
 
     private final OperationRepository repository;
 
+    private final SimpMessagingTemplate messagingTemplate;
+
     public MessageController(
-        OperationRepository repository
+
+        OperationRepository repository,
+
+        SimpMessagingTemplate messagingTemplate
+
     ) {
+
         this.repository = repository;
+
+        this.messagingTemplate = messagingTemplate;
+
     }
 
     @MessageMapping("/send")
-    @SendTo("/topic/messages")
-    public Operation send(
+
+    public void send(
+
         Operation operation
+
     ) {
 
         repository.save(operation);
 
-        return operation;
+        messagingTemplate.convertAndSend(
+
+            "/topic/document/" +
+
+            operation.getDocumentId(),
+
+            operation
+
+        );
+
     }
+
 }

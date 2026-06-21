@@ -11,6 +11,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class Operation {
     @Id
     private String id;
+    private String documentId;
     private String clientId;
     private OperationType type;
     private String value;

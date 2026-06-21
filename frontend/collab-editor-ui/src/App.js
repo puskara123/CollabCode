@@ -6,6 +6,8 @@ import Editor from "@monaco-editor/react";
 const clientId = crypto.randomUUID();
 let counter = 0;
 
+const documentId = "default";
+
 function randomBetween(min, max) {
   return (
     Math.floor(
@@ -167,11 +169,13 @@ function App() {
 
         const response =
           await fetch(
-            "http://localhost:8080/document/default/bootstrap"
+            `http://localhost:8080/document/${documentId}/bootstrap`
           );
 
         const operations =
           await response.json();
+
+        console.log("BOOTSTRAP", documentId, operations);
 
         // Apply every bootstrap op to charsRef WITHOUT updating the editor on
         // each iteration — a document with N ops would otherwise trigger N full
@@ -234,7 +238,7 @@ function App() {
         let bootstrapDone = false;
 
         stomp.subscribe(
-          "/topic/messages",
+          `/topic/document/${documentId}`,
 
           (msg) => {
 
@@ -530,6 +534,8 @@ function App() {
 
                   const op = {
 
+                    documentId: documentId,
+
                     clientId: clientId,
                   
                     type: "DELETE",
@@ -596,6 +602,7 @@ function App() {
                   );
 
                   const op = {
+                    documentId: documentId,
                     clientId: clientId,
                     type: "INSERT",
                     id: `${clientId}-${counter++}`,

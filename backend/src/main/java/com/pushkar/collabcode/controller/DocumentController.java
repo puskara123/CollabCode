@@ -32,7 +32,7 @@ public class DocumentController {
 
     ) {
 
-        return repository.findAll();
+        return repository.findByDocumentId(documentId);
 
     }
 }
