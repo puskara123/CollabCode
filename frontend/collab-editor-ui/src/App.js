@@ -3,10 +3,15 @@ import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 import Editor from "@monaco-editor/react";
 
+import {
+  Routes,
+  Route,
+  Navigate,
+  useParams,
+} from "react-router-dom";
+
 const clientId = crypto.randomUUID();
 let counter = 0;
-
-const documentId = "default";
 
 function randomBetween(min, max) {
   return (
@@ -139,7 +144,10 @@ function generatePosition(
   ];
 }
 
-function App() {
+function EditorPage() {
+
+  const { documentId } = useParams();
+
   const [connected, setConnected] = useState(false);
   const [editorReadOnly, setEditorReadOnly] = useState(true);
 
@@ -643,4 +651,40 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+
+  return (
+
+    <Routes>
+
+      <Route
+
+        path="/"
+
+        element={
+
+          <Navigate
+
+            to="/doc/default"
+
+            replace
+
+          />
+
+        }
+
+      />
+
+      <Route
+
+        path="/doc/:documentId"
+
+        element={<EditorPage />}
+
+      />
+
+    </Routes>
+
+  );
+
+}
