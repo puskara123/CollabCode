@@ -8,6 +8,8 @@ import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.security.Principal;
+
 @Controller
 public class MessageController {
 
@@ -33,9 +35,9 @@ public class MessageController {
 
     public void send(
 
-        Operation operation
+        Operation operation, Principal principal
 
-    ) {
+    ) {     
 
         repository.save(operation);
 

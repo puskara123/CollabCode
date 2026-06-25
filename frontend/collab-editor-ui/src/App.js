@@ -3,6 +3,13 @@ import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 import Editor from "@monaco-editor/react";
 
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+
+import { useAuth } from "./context/AuthContext";
+
 import {
   Routes,
   Route,
@@ -148,6 +155,8 @@ function EditorPage() {
 
   const { documentId } = useParams();
 
+  const { jwt } = useAuth();
+
   const [connected, setConnected] = useState(false);
   const [editorReadOnly, setEditorReadOnly] = useState(true);
 
@@ -177,13 +186,24 @@ function EditorPage() {
 
         const response =
           await fetch(
-            `http://localhost:8080/document/${documentId}/bootstrap`
+            `http://localhost:8080/document/${documentId}/bootstrap`, 
+            {
+              headers: {
+                Authorization: `Bearer ${jwt}`
+              }
+            }
           );
+        
+        if (!response.ok) {
+          throw new Error(
+            `Bootstrap failed (${response.status})`
+          );
+        }
 
         const operations =
           await response.json();
 
-        console.log("BOOTSTRAP", documentId, operations);
+        // console.log("BOOTSTRAP", documentId, operations);
 
         // Apply every bootstrap op to charsRef WITHOUT updating the editor on
         // each iteration — a document with N ops would otherwise trigger N full
@@ -223,6 +243,13 @@ function EditorPage() {
 
     const stomp = new Client({
       webSocketFactory: () => socket,
+
+      connectHeaders: {
+
+        Authorization: `Bearer ${jwt}`
+
+      },
+
       debug: () => {},
 
       onConnect: async () => {
@@ -334,7 +361,7 @@ function EditorPage() {
         // stay in sync across re-renders (imperative updateOptions loses
         // to the React prop on every re-render).
         setEditorReadOnly(false);
-        console.log("Bootstrap complete", ignoreChangeRef.current);
+        // console.log("Bootstrap complete", ignoreChangeRef.current);
 
       }     ,
     });
@@ -389,7 +416,7 @@ function EditorPage() {
 
     // Write synchronously, BEFORE any other event has a chance to read it.
 
-    debugState(
+    /*debugState(
 
       `${clientId}
 
@@ -399,7 +426,7 @@ function EditorPage() {
 
       updated
 
-    );
+    );*/
 
     charsRef.current = updated;
 
@@ -506,7 +533,7 @@ function EditorPage() {
             }
 
             if (ignoreChangeRef.current) {
-              console.log("Ignoring change event");
+              // console.log("Ignoring change event");
               ignoreChangeRef.current = false;  
               return;
             }
@@ -652,39 +679,35 @@ function EditorPage() {
 }
 
 export default function App() {
-
   return (
-
-    <Routes>
-
-      <Route
-
-        path="/"
-
-        element={
-
-          <Navigate
-
-            to="/doc/default"
-
-            replace
-
-          />
-
-        }
-
-      />
-
-      <Route
-
-        path="/doc/:documentId"
-
-        element={<EditorPage />}
-
-      />
-
-    </Routes>
-
+    <AuthProvider>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to="/login"
+              replace
+            />
+          }
+        />
+        <Route
+          path="/login"
+          element={<LoginPage />}
+        />
+        <Route
+          path="/register"
+          element={<RegisterPage />}
+        />
+        <Route
+          path="/doc/:documentId"
+          element={
+            <ProtectedRoute>
+              <EditorPage />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
-
 }
