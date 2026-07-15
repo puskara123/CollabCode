@@ -15,4 +15,5 @@
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/security/StompPrincipal.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/security/WebSocketAuthInterceptor.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/service/AuthService.java
+/home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/service/SessionRegistry.java
 /home/puskara/CollabCode/backend/src/main/java/com/pushkar/collabcode/websocket/MessageController.java

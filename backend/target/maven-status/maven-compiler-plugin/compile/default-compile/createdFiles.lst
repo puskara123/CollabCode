@@ -15,4 +15,6 @@ com/pushkar/collabcode/controller/DocumentController.class
 com/pushkar/collabcode/controller/AuthController.class
 com/pushkar/collabcode/model/PositionComponent.class
 com/pushkar/collabcode/service/AuthService.class
+com/pushkar/collabcode/service/SessionRegistry.class
 com/pushkar/collabcode/CollabcodeApplication.class
+com/pushkar/collabcode/service/SessionRegistry$SessionInfo.class

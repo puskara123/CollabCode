@@ -16,4 +16,7 @@ public class Operation {
     private OperationType type;
     private String value;
     private List<PositionComponent> position;
+
+    private Integer line;
+    private Integer column;
 }

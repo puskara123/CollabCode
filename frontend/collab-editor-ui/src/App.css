@@ -1,3 +1,43 @@
+.remote-cursor::before {
+    content: "";
+    display: inline-block;
+    border-left: 2px solid;
+    height: 1.2em;
+    margin-left: -1px;
+}
+
+.remote-cursor-0::before {
+    border-color: #ff4d4f;
+}
+
+.remote-cursor-1::before {
+    border-color: #52c41a;
+}
+
+.remote-cursor-2::before {
+    border-color: #1890ff;
+}
+
+.remote-cursor-3::before {
+    border-color: #fa8c16;
+}
+
+.remote-cursor-4::before {
+    border-color: #722ed1;
+}
+
+.remote-cursor-5::before {
+    border-color: #13c2c2;
+}
+
+.remote-cursor-6::before {
+    border-color: #eb2f96;
+}
+
+.remote-cursor-7::before {
+    border-color: #fadb14;
+}
+
 .App {
   text-align: center;
 }
